@@ -32,24 +32,50 @@ plot(Nile, type = "p", pch = 20, main = "Raw rainfall data, as used in Durbin an
 # =========================================================================
 # Function to return a.filter (a_{t|t}), a.t (a_{t+1}), and P.filter, P.t
 # =========================================================================
-getKalmanParams(Y, sigsq.ep, sisgsq.et, a1, P1){
+getKalmanParams <- function(Y, sigsq.ep, sigsq.eta, a1, P1){
     n <- length(Y)
     # Init lists of the params we want
     A.filter <- numeric(n)
     P.filter <- numeric(n)
-    A.t <- numeric(n)
-    P.t <- numeric(n)
+    A.t <- numeric(n + 1)
+    P.t <- numeric(n + 1)
     #
     A.t[1] <- a1
     P.t[1] <- P1
     # 
-    # Also save the prediction error, Vt
+    # Also save the prediction error, Vt , and the variance
     vt <- numeric(n)
+    Ft <- numeric(n)
 
-    for(t in 1:n){
-        vt <- Y[t] - A.t[t]
+    for(tt in 1:n){
+        # Prediction error, Pred variance, Kalman gain
+        vt[tt] <- Y[tt] - A.t[tt]
+        Ft[tt] <- P.t[tt] + sigsq.ep
+        Kt <- P.t[tt]/Ft[tt]
+        # Update variance matrices
+        P.filter[tt] <- P.t[tt] * (1 - Kt)
+        P.t[tt + 1] <- P.filter[tt] + sigsq.eta
+        # Update mean matrices
+        A.t[tt + 1] <- A.t[tt] + Kt*vt[tt]
+        A.filter[tt] <-  A.t[tt + 1] ## These are the same for the local level model
     }
+
+    return(list(
+        A.t = A.t[1:n], A.filter = A.filter, P.t = P.t[1:n], P.filter = P.filter, vt = vt, Ft = Ft
+    ))
 }
 
+#
+# Run it
+#
+ret <- getKalmanParams(Y = as.numeric(Nile), sigsq.ep = 15099, sigsq.eta = 1469.1, a1 = 0, P1 = 1e7)
 
-
+# Recreate the plot of P_t
+plot(ret$P.t,  type = "l", ylim = c(5000, 17500), ylab = "P_t", main = "Filtered State Variance by year\n Stabilizes due to stationarity")
+# Last Ft is not populated, because we only go through n+1
+plot(ret$Ft,  type = "l", ylim = c(20000, 32500), ylab = "F_t", main = "Prediction Variance by year\n Stabilizes due to stationarity")
+#
+# Compare data to model
+#
+plot(Nile, type = "p", pch = 20, main = "Nile, data and local level model")
+lines(1872:1970, ret$A.t[-1])
